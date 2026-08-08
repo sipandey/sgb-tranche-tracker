@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      SGB_DB_PATH: /data/sgb.sqlite
+      SGB_SEED_DEMO: "1"
+      # IBJA_ACCESS_TOKEN: "your-token"
+    volumes:
+      - sgb-data:/data
+    restart: unless-stopped
+
+volumes:
+  sgb-data:
