@@ -1,4 +1,4 @@
-import { getDb, getSettings } from "@/lib/db";
+import { execute, getSettings, queryOne } from "@/lib/db";
 import { BROWSER_UA, fetchText, toIsoDate } from "./http";
 
 export type GoldQuote = {
@@ -66,8 +66,7 @@ export async function ingestGoldSpot(sessionDate?: string): Promise<{
   quote?: GoldQuote;
   error?: string;
 }> {
-  const db = getDb();
-  const settings = getSettings();
+  const settings = await getSettings();
   const token = process.env.IBJA_ACCESS_TOKEN || settings.ibja_access_token;
 
   let quote: GoldQuote | null = null;
@@ -82,47 +81,58 @@ export async function ingestGoldSpot(sessionDate?: string): Promise<{
   }
 
   const date = sessionDate || quote.sessionDate;
-  db.prepare(
+  await execute(
     `INSERT INTO gold_spot (session_date, rate_per_10g, purity, source)
      VALUES (?, ?, 999, ?)
      ON CONFLICT(session_date, source) DO UPDATE SET
        rate_per_10g = excluded.rate_per_10g,
-       fetched_at = datetime('now')`
-  ).run(date, quote.ratePer10g, quote.source);
+       fetched_at = datetime('now')`,
+    [date, quote.ratePer10g, quote.source]
+  );
 
   return { ok: true, quote: { ...quote, sessionDate: date } };
 }
 
-export function getLatestGold(sessionDate?: string): {
+export async function getLatestGold(sessionDate?: string): Promise<{
   rate_per_10g: number;
   session_date: string;
   source: string;
-} | null {
-  const db = getDb();
+} | null> {
   if (sessionDate) {
-    const row = db
-      .prepare(
-        `SELECT rate_per_10g, session_date, source FROM gold_spot
-         WHERE session_date = ?
-         ORDER BY CASE source WHEN 'ibja_api' THEN 0 ELSE 1 END, fetched_at DESC
-         LIMIT 1`
-      )
-      .get(sessionDate) as
-      | { rate_per_10g: number; session_date: string; source: string }
-      | undefined;
-    if (row) return row;
+    const row = await queryOne<{
+      rate_per_10g: number;
+      session_date: string;
+      source: string;
+    }>(
+      `SELECT rate_per_10g, session_date, source FROM gold_spot
+       WHERE session_date = ?
+       ORDER BY CASE source WHEN 'ibja_api' THEN 0 ELSE 1 END, fetched_at DESC
+       LIMIT 1`,
+      [sessionDate]
+    );
+    if (row) {
+      return {
+        rate_per_10g: Number(row.rate_per_10g),
+        session_date: row.session_date,
+        source: row.source,
+      };
+    }
   }
-  return (
-    (db
-      .prepare(
-        `SELECT rate_per_10g, session_date, source FROM gold_spot
-         ORDER BY session_date DESC,
-           CASE source WHEN 'ibja_api' THEN 0 ELSE 1 END,
-           fetched_at DESC
-         LIMIT 1`
-      )
-      .get() as
-      | { rate_per_10g: number; session_date: string; source: string }
-      | undefined) ?? null
+  const latest = await queryOne<{
+    rate_per_10g: number;
+    session_date: string;
+    source: string;
+  }>(
+    `SELECT rate_per_10g, session_date, source FROM gold_spot
+     ORDER BY session_date DESC,
+       CASE source WHEN 'ibja_api' THEN 0 ELSE 1 END,
+       fetched_at DESC
+     LIMIT 1`
   );
+  if (!latest) return null;
+  return {
+    rate_per_10g: Number(latest.rate_per_10g),
+    session_date: latest.session_date,
+    source: latest.source,
+  };
 }

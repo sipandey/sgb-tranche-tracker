@@ -1,7 +1,4 @@
 export const SCHEMA_SQL = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS tranches (
   isin TEXT PRIMARY KEY,
   tranche_code TEXT NOT NULL UNIQUE,

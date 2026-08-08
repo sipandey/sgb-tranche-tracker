@@ -16,11 +16,11 @@ import { PositionForm } from "@/components/PositionForm";
 
 export const dynamic = "force-dynamic";
 
-export default function PositionsPage() {
-  const lots = getPositions();
-  const sessionDate = getLastSessionDate();
-  const settings = getSettings();
-  const gold = sessionDate ? getLatestGold(sessionDate) : null;
+export default async function PositionsPage() {
+  const lots = await getPositions();
+  const sessionDate = await getLastSessionDate();
+  const settings = await getSettings();
+  const gold = sessionDate ? await getLatestGold(sessionDate) : null;
 
   // Aggregate by ISIN
   const byIsin = new Map<
@@ -56,13 +56,19 @@ export default function PositionsPage() {
     byIsin.set(lot.isin, cur);
   }
 
-  const rows = [...byIsin.values()].map((p) => {
+  const rows = [];
+  for (const p of byIsin.values()) {
     const metrics =
-      sessionDate != null ? getTrancheMetrics(p.isin, sessionDate) : null;
-    const market = metrics?.market_price ?? null;
+      sessionDate != null
+        ? await getTrancheMetrics(p.isin, sessionDate)
+        : null;
+    const market = metrics?.market_price != null ? Number(metrics.market_price) : null;
     const fv =
-      metrics?.fair_value ??
-      (gold ? fairValuePerUnit(gold.rate_per_10g, p.units_per_bond) : null);
+      metrics?.fair_value != null
+        ? Number(metrics.fair_value)
+        : gold
+          ? fairValuePerUnit(gold.rate_per_10g, Number(p.units_per_bond))
+          : null;
     const avgCost = p.units > 0 ? p.cost / p.units : 0;
     const mktValue = market != null ? market * p.units : null;
     const fvValue = fv != null ? fv * p.units : null;
@@ -83,23 +89,23 @@ export default function PositionsPage() {
     ) {
       const y = ytmForCagr({
         marketPrice: avgCost,
-        issuePrice: p.issue_price,
-        couponPa: p.coupon_pa,
+        issuePrice: Number(p.issue_price),
+        couponPa: Number(p.coupon_pa),
         sessionDate,
         maturityDate: p.maturity_date,
-        currentFairValue: metrics.fair_value,
+        currentFairValue: Number(metrics.fair_value),
         goldCagr: cagr / 100,
-        yearsToMaturity: metrics.years_to_maturity ?? 0,
+        yearsToMaturity: Number(metrics.years_to_maturity ?? 0),
       });
       projectedRedemption = y.redemption * p.units;
       const flows = buildPositionCashFlows({
         lots: p.lots.map((l) => ({
-          units: l.units,
-          cost_per_unit: l.cost_per_unit,
+          units: Number(l.units),
+          cost_per_unit: Number(l.cost_per_unit),
           purchase_date: l.purchase_date,
         })),
-        issuePrice: p.issue_price,
-        couponPa: p.coupon_pa,
+        issuePrice: Number(p.issue_price),
+        couponPa: Number(p.coupon_pa),
         maturityDate: p.maturity_date,
         projectedRedemptionPerUnit: y.redemption,
         cgTaxRatePct: settings.cg_tax_rate_pct,
@@ -111,10 +117,14 @@ export default function PositionsPage() {
 
     const netRed =
       projectedRedemption != null
-        ? netRedemptionAfterCgTax(p.cost, projectedRedemption, settings.cg_tax_rate_pct)
+        ? netRedemptionAfterCgTax(
+            p.cost,
+            projectedRedemption,
+            settings.cg_tax_rate_pct
+          )
         : null;
 
-    return {
+    rows.push({
       ...p,
       avgCost,
       market,
@@ -128,8 +138,8 @@ export default function PositionsPage() {
       xirrPre,
       xirrPost,
       cagr,
-    };
-  });
+    });
+  }
 
   return (
     <div className="pt-8">

@@ -1,4 +1,4 @@
-import { getDb, getSettings } from "@/lib/db";
+import { batch, getSettings, queryAll } from "@/lib/db";
 
 /**
  * Cross-check NSE vs BSE closes for a session.
@@ -6,25 +6,22 @@ import { getDb, getSettings } from "@/lib/db";
  * If within band → mark both verified.
  * Single-source prices stay unverified.
  */
-export function crossCheckPrices(sessionDate: string): {
+export async function crossCheckPrices(sessionDate: string): Promise<{
   verified: number;
   outliers: number;
   singleSource: number;
-} {
-  const db = getDb();
-  const settings = getSettings();
+}> {
+  const settings = await getSettings();
   const threshold = settings.price_outlier_threshold_pct / 100;
 
-  const nse = db
-    .prepare(
-      `SELECT isin, close, volume FROM prices WHERE exchange = 'NSE' AND session_date = ?`
-    )
-    .all(sessionDate) as { isin: string; close: number; volume: number }[];
-  const bse = db
-    .prepare(
-      `SELECT isin, close, volume FROM prices WHERE exchange = 'BSE' AND session_date = ?`
-    )
-    .all(sessionDate) as { isin: string; close: number; volume: number }[];
+  const nse = await queryAll<{ isin: string; close: number; volume: number }>(
+    `SELECT isin, close, volume FROM prices WHERE exchange = 'NSE' AND session_date = ?`,
+    [sessionDate]
+  );
+  const bse = await queryAll<{ isin: string; close: number; volume: number }>(
+    `SELECT isin, close, volume FROM prices WHERE exchange = 'BSE' AND session_date = ?`,
+    [sessionDate]
+  );
 
   const bseMap = new Map(bse.map((r) => [r.isin, r]));
   const nseMap = new Map(nse.map((r) => [r.isin, r]));
@@ -33,78 +30,85 @@ export function crossCheckPrices(sessionDate: string): {
   let verified = 0;
   let outliers = 0;
   let singleSource = 0;
+  const stmts: { sql: string; args: (string | number)[] }[] = [];
 
-  const mark = db.prepare(
-    `UPDATE prices SET verified = ?, outlier = ? WHERE isin = ? AND exchange = ? AND session_date = ?`
-  );
-
-  const tx = db.transaction(() => {
-    for (const isin of allIsins) {
-      const a = nseMap.get(isin);
-      const b = bseMap.get(isin);
-      if (a && b) {
-        const mid = (a.close + b.close) / 2;
-        const rel = mid > 0 ? Math.abs(a.close - b.close) / mid : 0;
-        if (rel > threshold) {
-          mark.run(0, 1, isin, "NSE", sessionDate);
-          mark.run(0, 1, isin, "BSE", sessionDate);
-          outliers++;
-        } else {
-          mark.run(1, 0, isin, "NSE", sessionDate);
-          mark.run(1, 0, isin, "BSE", sessionDate);
-          verified++;
-        }
+  for (const isin of allIsins) {
+    const a = nseMap.get(isin);
+    const b = bseMap.get(isin);
+    if (a && b) {
+      const mid = (Number(a.close) + Number(b.close)) / 2;
+      const rel =
+        mid > 0 ? Math.abs(Number(a.close) - Number(b.close)) / mid : 0;
+      if (rel > threshold) {
+        stmts.push({
+          sql: `UPDATE prices SET verified = ?, outlier = ? WHERE isin = ? AND exchange = ? AND session_date = ?`,
+          args: [0, 1, isin, "NSE", sessionDate],
+        });
+        stmts.push({
+          sql: `UPDATE prices SET verified = ?, outlier = ? WHERE isin = ? AND exchange = ? AND session_date = ?`,
+          args: [0, 1, isin, "BSE", sessionDate],
+        });
+        outliers++;
       } else {
-        const ex = a ? "NSE" : "BSE";
-        mark.run(0, 0, isin, ex, sessionDate);
-        singleSource++;
+        stmts.push({
+          sql: `UPDATE prices SET verified = ?, outlier = ? WHERE isin = ? AND exchange = ? AND session_date = ?`,
+          args: [1, 0, isin, "NSE", sessionDate],
+        });
+        stmts.push({
+          sql: `UPDATE prices SET verified = ?, outlier = ? WHERE isin = ? AND exchange = ? AND session_date = ?`,
+          args: [1, 0, isin, "BSE", sessionDate],
+        });
+        verified++;
       }
+    } else {
+      const ex = a ? "NSE" : "BSE";
+      stmts.push({
+        sql: `UPDATE prices SET verified = ?, outlier = ? WHERE isin = ? AND exchange = ? AND session_date = ?`,
+        args: [0, 0, isin, ex, sessionDate],
+      });
+      singleSource++;
     }
-  });
-  tx();
+  }
 
+  if (stmts.length) await batch(stmts);
   return { verified, outliers, singleSource };
 }
 
-/**
- * Pick display price for a tranche: prefer verified; if both verified use
- * volume-weighted preference toward higher-liquidity exchange; never silent-average outliers.
- */
-export function pickMarketPrice(
+export async function pickMarketPrice(
   sessionDate: string,
   isin: string
-): {
+): Promise<{
   close: number;
   volume: number;
   verified: boolean;
   outlier: boolean;
   exchange: string;
-} | null {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT exchange, close, volume, verified, outlier FROM prices
-       WHERE isin = ? AND session_date = ?`
-    )
-    .all(isin, sessionDate) as {
+} | null> {
+  const rows = await queryAll<{
     exchange: string;
     close: number;
     volume: number;
     verified: number;
     outlier: number;
-  }[];
+  }>(
+    `SELECT exchange, close, volume, verified, outlier FROM prices
+     WHERE isin = ? AND session_date = ?`,
+    [isin, sessionDate]
+  );
   if (!rows.length) return null;
 
-  const verified = rows.filter((r) => r.verified);
-  const pool = verified.length ? verified : rows.filter((r) => !r.outlier);
+  const verifiedRows = rows.filter((r) => Number(r.verified));
+  const pool = verifiedRows.length
+    ? verifiedRows
+    : rows.filter((r) => !Number(r.outlier));
   const use = pool.length ? pool : rows;
-  use.sort((a, b) => b.volume - a.volume);
+  use.sort((a, b) => Number(b.volume) - Number(a.volume));
   const best = use[0];
   return {
-    close: best.close,
-    volume: rows.reduce((s, r) => s + r.volume, 0),
-    verified: best.verified === 1,
-    outlier: best.outlier === 1,
+    close: Number(best.close),
+    volume: rows.reduce((s, r) => s + Number(r.volume), 0),
+    verified: Number(best.verified) === 1,
+    outlier: Number(best.outlier) === 1,
     exchange: best.exchange,
   };
 }

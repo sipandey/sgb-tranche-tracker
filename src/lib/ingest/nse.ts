@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { batch, execute, queryAll } from "@/lib/db";
 import {
   BROWSER_UA,
   candidateSessionDates,
@@ -141,7 +141,6 @@ export async function fetchNseIsinMaster(): Promise<
 export async function ingestNsePrices(
   preferDate?: string
 ): Promise<{ sessionDate: string | null; count: number; error?: string }> {
-  const db = getDb();
   const start = preferDate
     ? new Date(preferDate + "T00:00:00Z")
     : new Date();
@@ -155,13 +154,14 @@ export async function ingestNsePrices(
       continue;
     }
 
-    // Map symbols to ISINs via tranches table
+    const trancheRows = await queryAll<{
+      isin: string;
+      nse_symbol: string | null;
+      tranche_code: string;
+    }>(`SELECT isin, nse_symbol, tranche_code FROM tranches WHERE active = 1`);
+
     const bySymbol = new Map(
-      (
-        db
-          .prepare(`SELECT isin, nse_symbol, tranche_code FROM tranches WHERE active = 1`)
-          .all() as { isin: string; nse_symbol: string | null; tranche_code: string }[]
-      ).flatMap((t) => {
+      trancheRows.flatMap((t) => {
         const entries: [string, string][] = [];
         if (t.nse_symbol) entries.push([t.nse_symbol.toUpperCase(), t.isin]);
         entries.push([t.tranche_code.toUpperCase(), t.isin]);
@@ -169,54 +169,65 @@ export async function ingestNsePrices(
       })
     );
 
-    // Try enriching from ISIN master
     const master = await fetchNseIsinMaster();
+    const masterStmts: { sql: string; args: (string | number | null)[] }[] = [];
     for (const m of master) {
       bySymbol.set(m.symbol.toUpperCase(), m.isin);
-      db.prepare(
-        `INSERT INTO tranches (isin, tranche_code, nse_symbol, coupon_pa, units_per_bond, active)
-         VALUES (?, ?, ?, 2.5, 1.0, 1)
-         ON CONFLICT(isin) DO UPDATE SET nse_symbol = excluded.nse_symbol, updated_at = datetime('now')`
-      ).run(m.isin, m.symbol, m.symbol);
+      masterStmts.push({
+        sql: `INSERT INTO tranches (isin, tranche_code, nse_symbol, coupon_pa, units_per_bond, active)
+              VALUES (?, ?, ?, 2.5, 1.0, 1)
+              ON CONFLICT(isin) DO UPDATE SET nse_symbol = excluded.nse_symbol, updated_at = datetime('now')`,
+        args: [m.isin, m.symbol, m.symbol],
+      });
     }
+    if (masterStmts.length) await batch(masterStmts);
 
-    const upsert = db.prepare(`
-      INSERT INTO prices (isin, exchange, session_date, close, volume, source, verified, outlier)
-      VALUES (?, 'NSE', ?, ?, ?, 'nse_bhavcopy', 0, 0)
-      ON CONFLICT(isin, exchange, session_date) DO UPDATE SET
-        close = excluded.close,
-        volume = excluded.volume,
-        source = excluded.source,
-        fetched_at = datetime('now')
-    `);
-
+    const stmts: { sql: string; args: (string | number | null)[] }[] = [];
     let count = 0;
-    const tx = db.transaction(() => {
-      for (const row of result.rows) {
-        let isin = row.isin || bySymbol.get(row.symbol);
-        if (!isin) {
-          // Auto-create tranche stub
-          isin = `UNKNOWN-${row.symbol}`;
-          db.prepare(
-            `INSERT INTO tranches (isin, tranche_code, nse_symbol, coupon_pa, units_per_bond, active)
-             VALUES (?, ?, ?, 2.5, 1.0, 1)
-             ON CONFLICT(isin) DO NOTHING`
-          ).run(isin, row.symbol, row.symbol);
-          // Also try unique tranche_code conflict — skip if code exists under other isin
-        }
-        try {
-          upsert.run(isin, result.sessionDate, row.close, row.volume);
-          count++;
-        } catch {
-          // ignore unique conflicts on tranche_code for stubs
+    for (const row of result.rows) {
+      let isin = row.isin || bySymbol.get(row.symbol);
+      if (!isin) {
+        isin = `UNKNOWN-${row.symbol}`;
+        stmts.push({
+          sql: `INSERT INTO tranches (isin, tranche_code, nse_symbol, coupon_pa, units_per_bond, active)
+                VALUES (?, ?, ?, 2.5, 1.0, 1)
+                ON CONFLICT(isin) DO NOTHING`,
+          args: [isin, row.symbol, row.symbol],
+        });
+      }
+      stmts.push({
+        sql: `INSERT INTO prices (isin, exchange, session_date, close, volume, source, verified, outlier)
+              VALUES (?, 'NSE', ?, ?, ?, 'nse_bhavcopy', 0, 0)
+              ON CONFLICT(isin, exchange, session_date) DO UPDATE SET
+                close = excluded.close,
+                volume = excluded.volume,
+                source = excluded.source,
+                fetched_at = datetime('now')`,
+        args: [isin, result.sessionDate, row.close, row.volume],
+      });
+      count++;
+    }
+    stmts.push({
+      sql: `INSERT INTO trading_calendar (session_date, nse_ok) VALUES (?, 1)
+            ON CONFLICT(session_date) DO UPDATE SET nse_ok = 1`,
+      args: [result.sessionDate],
+    });
+
+    const chunk = 80;
+    for (let i = 0; i < stmts.length; i += chunk) {
+      try {
+        await batch(stmts.slice(i, i + chunk));
+      } catch {
+        // skip conflicting stub inserts
+        for (const s of stmts.slice(i, i + chunk)) {
+          try {
+            await execute(s.sql, s.args);
+          } catch {
+            /* ignore */
+          }
         }
       }
-      db.prepare(
-        `INSERT INTO trading_calendar (session_date, nse_ok) VALUES (?, 1)
-         ON CONFLICT(session_date) DO UPDATE SET nse_ok = 1`
-      ).run(result.sessionDate);
-    });
-    tx();
+    }
     return { sessionDate: result.sessionDate, count };
   }
   return { sessionDate: null, count: 0, error: lastError };

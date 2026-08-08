@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { execute, queryOne } from "@/lib/db";
 import { getPositions } from "@/lib/db/queries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ lots: getPositions() });
+  return NextResponse.json({ lots: await getPositions() });
 }
 
 export async function POST(req: Request) {
@@ -25,33 +25,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid cost" }, { status: 400 });
     }
 
-    const db = getDb();
-    const exists = db
-      .prepare(`SELECT isin FROM tranches WHERE isin = ?`)
-      .get(isin);
+    const exists = await queryOne<{ isin: string }>(
+      `SELECT isin FROM tranches WHERE isin = ?`,
+      [isin]
+    );
     if (!exists) {
       return NextResponse.json({ error: "Unknown ISIN" }, { status: 400 });
     }
 
-    const info = db
-      .prepare(
-        `INSERT INTO position_lots (isin, units, cost_per_unit, purchase_date, notes)
-         VALUES (?, ?, ?, ?, ?)`
-      )
-      .run(isin, units, cost, purchase_date, notes);
+    const info = await execute(
+      `INSERT INTO position_lots (isin, units, cost_per_unit, purchase_date, notes)
+       VALUES (?, ?, ?, ?, ?)`,
+      [isin, units, cost, purchase_date, notes]
+    );
 
-    // Reduce dry powder remaining by cost (opportunistic pool)
-    const remaining = db
-      .prepare(`SELECT value FROM settings WHERE key = 'dry_powder_remaining_inr'`)
-      .get() as { value: string } | undefined;
+    const remaining = await queryOne<{ value: string }>(
+      `SELECT value FROM settings WHERE key = 'dry_powder_remaining_inr'`
+    );
     if (remaining) {
       const next = Math.max(0, Number(remaining.value) - units * cost);
-      db.prepare(
-        `UPDATE settings SET value = ?, updated_at = datetime('now') WHERE key = 'dry_powder_remaining_inr'`
-      ).run(String(next));
+      await execute(
+        `UPDATE settings SET value = ?, updated_at = datetime('now') WHERE key = 'dry_powder_remaining_inr'`,
+        [String(next)]
+      );
     }
 
-    return NextResponse.json({ id: info.lastInsertRowid, ok: true });
+    return NextResponse.json({ id: Number(info.lastInsertRowid), ok: true });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed" },

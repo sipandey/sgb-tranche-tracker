@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const tranches = getActiveTranches().map((t) => ({
+  const tranches = (await getActiveTranches()).map((t) => ({
     isin: t.isin,
     tranche_code: t.tranche_code,
     maturity_date: t.maturity_date,
