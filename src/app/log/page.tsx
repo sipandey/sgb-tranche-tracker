@@ -27,16 +27,17 @@ export default async function LogPage() {
     <div className="pt-8">
       <h1 className="font-display text-4xl tracking-tight mb-2">Action log</h1>
       <p className="muted mb-4 max-w-2xl">
-        What the rules suggested each trading day — buy, skip, or hold — plus
-        suggested amount and how much you’ve already put in.
+        A diary of what the rules whispered each trading day — great deal, okay
+        deal, add a little, or not today — plus a suggested amount from your
+        cash piggy bank. Still not a buy button.
       </p>
       <SessionStamp sessionDate={sessionDate} />
       <div className="mt-4">
-        <PageExplainer title="How to read this log">
+        <PageExplainer title="How to read this diary">
           <p>
-            Each row is a checklist item from the rules engine for that day. It
-            is not an order placed with a broker. Suggested size uses your “cash
-            set aside” pool in Settings.
+            Each row is a checklist note from the rules for that day. Nothing
+            here sends an order to a broker. Suggested rupees come from the cash
+            you’ve set aside in Settings.
           </p>
         </PageExplainer>
         <DisclaimerBanner />

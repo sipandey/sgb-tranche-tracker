@@ -21,9 +21,9 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SGB Tracker — find gold bonds cheaper than gold",
+  title: "SGB Tracker — spot gold coupons on sale",
   description:
-    "Plain-language guide to Sovereign Gold Bonds on the stock exchange: see which trade cheaper than gold, with clear buy/skip signals. Not investment advice.",
+    "A friendly guide to Sovereign Gold Bonds: see when gold-bond coupons trade cheaper than gold. For learning — not a buy button.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
