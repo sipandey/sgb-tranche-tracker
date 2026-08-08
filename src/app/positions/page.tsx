@@ -145,9 +145,9 @@ export default async function PositionsPage() {
     <div className="pt-8">
       <h1 className="font-display text-4xl tracking-tight mb-2">My holdings</h1>
       <p className="muted mb-4 max-w-2xl">
-        What you own, what you paid, how you’re doing vs today’s market and vs
-        gold, and your real yearly return (XIRR) — before and after your capital
-        gains tax assumption ({rows[0]?.cagr ?? 8}% gold-growth scenario shown).
+        Coupons you’ve already bought — what you paid, what they’re worth today,
+        and your real yearly return (including RBI’s little bonus and how long
+        the money sat). Gold-growth story shown: {rows[0]?.cagr ?? 8}% / year.
       </p>
       <SessionStamp
         sessionDate={sessionDate}
@@ -165,7 +165,7 @@ export default async function PositionsPage() {
           <table className="data">
             <thead>
               <tr>
-                <th>Bond</th>
+                <th>Batch</th>
                 <th>Units</th>
                 <th>Avg price paid</th>
                 <th>Worth today</th>
@@ -173,7 +173,7 @@ export default async function PositionsPage() {
                 <th>Gain/loss vs gold</th>
                 <th>Projected payout</th>
                 <th>After tax</th>
-                <th title="Your real yearly return, accounting for the coupon and how long your money was invested (XIRR)">
+                <th title="Your real yearly return, accounting for the yearly bonus and how long your money was invested (XIRR)">
                   Real yearly return
                 </th>
               </tr>
@@ -225,8 +225,9 @@ export default async function PositionsPage() {
           </table>
         </div>
         <p className="px-4 py-3 text-xs muted">
-          “Real yearly return” accounts for the fixed 2.5% yearly interest
-          (coupon) and how long your money was invested (XIRR).
+          “Real yearly return” folds in RBI’s little yearly bonus (like savings
+          interest) and how long your money was invested (XIRR). This page never
+          places a trade for you.
         </p>
       </section>
 

@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { DiscountLabel } from "@/components/DiscountLabel";
+import { CoinStack } from "@/components/CoinStack";
+import { SaleBadge } from "@/components/DiscountLabel";
+import { SafetyNote } from "@/components/SafetyNote";
 import { SignalBadge } from "@/components/SignalBadge";
 import { TrustBadge } from "@/components/TrustBadge";
 import { YearsLeft } from "@/components/YearsLeft";
-import { SIGNAL_COPY } from "@/lib/plain-language";
+import { WhatIsThis } from "@/components/Tip";
+import { batchDisplayName } from "@/lib/plain-language";
 import { formatInr } from "@/lib/format";
 
 export type RankingRow = {
@@ -25,7 +28,7 @@ export type RankingRow = {
 
 export function RankingTable({ rows }: { rows: RankingRow[] }) {
   const [showAll, setShowAll] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [openCard, setOpenCard] = useState<Record<string, boolean>>({});
 
   const filtered = useMemo(() => {
     if (showAll) return rows;
@@ -38,177 +41,143 @@ export function RankingTable({ rows }: { rows: RankingRow[] }) {
     (r) => r.signal === "strong_buy" || r.signal === "buy"
   ).length;
 
-  // First occurrence of each signal in the filtered list gets the plain line
   const firstOf = new Map<string, string>();
   for (const r of filtered) {
     if (r.signal && !firstOf.has(r.signal)) firstOf.set(r.signal, r.isin);
   }
 
   return (
-    <section id="ranking" className="panel animate-rise-delay">
-      <div className="px-4 pt-4 pb-3 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+    <section id="ranking" className="animate-rise-delay">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
         <div>
-          <h2 className="font-display text-2xl">Bonds worth a look</h2>
-          <p className="text-xs muted mt-1 max-w-xl">
-            Default list shows only Strong buy and Buy.{" "}
-            {SIGNAL_COPY.skip.label} / Trickle rows stay one tap away.
+          <h2 className="font-display text-2xl sm:text-3xl">
+            Coupons on sale
+            <WhatIsThis title="What am I looking at?">
+              Each card is one batch of gold-bond coupons people trade on the
+              exchange. Bigger “extra gold” numbers usually mean a deeper sale
+              versus today’s gold price.
+            </WhatIsThis>
+          </h2>
+          <p className="text-sm muted mt-1 max-w-xl">
+            We start with great and okay deals. Tap “Show every batch” if you
+            want the full shelf — including “Not today.”
           </p>
         </div>
         <button
           type="button"
-          className="btn btn-ghost text-sm self-start"
+          className="btn btn-ghost text-sm self-start min-h-11 px-4"
           onClick={() => setShowAll((v) => !v)}
         >
           {showAll
-            ? `Show Strong buy & Buy only (${buyCount})`
-            : `Show all ${rows.length} bonds`}
+            ? `Just the deals (${buyCount})`
+            : `Show every batch (${rows.length})`}
         </button>
       </div>
 
-      {/* Desktop table */}
-      <div className="table-wrap hidden md:block">
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Bond</th>
-              <th>Signal</th>
-              <th>vs gold price</th>
-              <th>Market price</th>
-              <th className="col-secondary">Gold-linked value</th>
-              <th className="col-secondary">Trading activity</th>
-              <th className="col-secondary">Time left</th>
-              <th>Price confidence</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r) => {
-              const showExplain =
-                !!r.signal && firstOf.get(r.signal) === r.isin;
-              return (
-                <tr key={r.isin}>
-                  <td>
-                    <Link
-                      href={`/tranches/${encodeURIComponent(r.tranche_code)}`}
-                      className="text-[var(--gold-bright)] hover:underline"
-                    >
-                      {r.tranche_code}
-                    </Link>
-                  </td>
-                  <td>
-                    <SignalBadge signal={r.signal} showExplain={showExplain} />
-                  </td>
-                  <td>
-                    <DiscountLabel
-                      discountPct={Number(r.discount_pct)}
-                      compact
-                    />
-                  </td>
-                  <td className="num">₹{formatInr(Number(r.market_price))}</td>
-                  <td className="num col-secondary">
-                    ₹{formatInr(Number(r.fair_value))}
-                  </td>
-                  <td className="num col-secondary">
-                    {formatInr(Number(r.volume), 0)}
-                  </td>
-                  <td className="col-secondary">
-                    <YearsLeft years={r.years_to_maturity} />
-                  </td>
-                  <td>
-                    <TrustBadge
-                      verified={r.price_verified}
-                      outlier={r.price_outlier}
-                      thin={!r.liquidity_ok}
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={8} className="muted py-8 text-center">
-                  No Strong buy / Buy bonds this session — try “Show all”.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <SafetyNote className="mb-5" />
 
-      {/* Mobile stacked cards — primary fields first */}
-      <div className="md:hidden divide-y divide-[var(--line)]">
+      <div className="bond-grid">
         {filtered.map((r) => {
-          const open = expanded[r.isin];
           const showExplain =
             !!r.signal && firstOf.get(r.signal) === r.isin;
+          const details = openCard[r.isin];
+          const onSale = r.discount_pct >= 0;
           return (
-            <div key={r.isin} className="px-4 py-3">
+            <article
+              key={r.isin}
+              className={`bond-card panel ${onSale ? "bond-card--sale" : ""}`}
+            >
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
+                  <p className="text-xs muted mb-0.5">Gold coupon batch</p>
                   <Link
                     href={`/tranches/${encodeURIComponent(r.tranche_code)}`}
-                    className="text-[var(--gold-bright)] font-medium"
+                    className="font-display text-xl text-[var(--gold-bright)] hover:underline leading-tight"
                   >
-                    {r.tranche_code}
+                    {batchDisplayName(r.tranche_code)}
                   </Link>
-                  <div className="mt-1">
-                    <SignalBadge signal={r.signal} showExplain={showExplain} />
-                  </div>
+                  <p className="text-xs muted num mt-0.5">{r.tranche_code}</p>
                 </div>
-                <div className="text-right">
-                  <DiscountLabel
-                    discountPct={Number(r.discount_pct)}
-                    compact
-                  />
-                  <div className="num text-sm mt-1">
-                    ₹{formatInr(Number(r.market_price))}
+                <CoinStack discountPct={r.discount_pct} />
+              </div>
+
+              <div className="mt-4 flex items-center gap-3 flex-wrap">
+                <SaleBadge discountPct={r.discount_pct} />
+                <div className="text-sm">
+                  <div className="muted text-xs">You’d pay about</div>
+                  <div className="num text-lg">
+                    ₹{formatInr(r.market_price)}
                   </div>
                 </div>
               </div>
-              <div className="mt-2">
+
+              <div className="mt-3">
+                <SignalBadge
+                  signal={r.signal}
+                  showExplain={showExplain}
+                  large
+                />
+              </div>
+
+              <p className="text-sm muted mt-3 leading-snug">
+                {onSale
+                  ? `Takeaway: this coupon looks cheaper than the gold behind it — a possible bargain if you can wait.`
+                  : `Takeaway: sellers want more than the gold is worth today — skip for now.`}
+              </p>
+
+              <div className="mt-3">
                 <TrustBadge
                   verified={r.price_verified}
                   outlier={r.price_outlier}
                   thin={!r.liquidity_ok}
                 />
               </div>
+
               <button
                 type="button"
-                className="text-xs muted mt-2 underline-offset-2 hover:underline"
+                className="text-sm text-[var(--gold-bright)] mt-3 min-h-10"
                 onClick={() =>
-                  setExpanded((e) => ({ ...e, [r.isin]: !e[r.isin] }))
+                  setOpenCard((e) => ({ ...e, [r.isin]: !e[r.isin] }))
                 }
               >
-                {open ? "Hide details" : "Show details"}
+                {details ? "Hide details" : "Show details"}
               </button>
-              {open && (
-                <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
+
+              {details && (
+                <dl className="mt-3 grid grid-cols-1 gap-2 text-sm border-t border-[var(--line)] pt-3">
                   <div>
-                    <dt className="muted">Gold-linked value</dt>
-                    <dd className="num">₹{formatInr(Number(r.fair_value))}</dd>
+                    <dt className="muted text-xs">Gold-linked value</dt>
+                    <dd className="num">₹{formatInr(r.fair_value)}</dd>
                   </div>
                   <div>
-                    <dt className="muted">Trading activity</dt>
-                    <dd className="num">{formatInr(Number(r.volume), 0)}</dd>
+                    <dt className="muted text-xs">How busy is trading?</dt>
+                    <dd className="num">{formatInr(r.volume, 0)} units today</dd>
                   </div>
-                  <div className="col-span-2">
-                    <dt className="muted">
-                      Years left until this bond pays out
-                    </dt>
+                  <div>
+                    <dt className="muted text-xs mb-1">Piggy-bank timer</dt>
                     <dd>
                       <YearsLeft years={r.years_to_maturity} />
                     </dd>
                   </div>
+                  <Link
+                    href={`/tranches/${encodeURIComponent(r.tranche_code)}`}
+                    className="btn mt-1 min-h-11"
+                  >
+                    Open this batch
+                  </Link>
                 </dl>
               )}
-            </div>
+            </article>
           );
         })}
-        {filtered.length === 0 && (
-          <p className="muted py-8 text-center text-sm px-4">
-            No Strong buy / Buy bonds this session — try “Show all”.
-          </p>
-        )}
       </div>
+
+      {filtered.length === 0 && (
+        <p className="muted panel p-8 text-center text-sm">
+          No “great” or “okay” deals this session — try showing every batch, or
+          check back after the next trading day.
+        </p>
+      )}
     </section>
   );
 }

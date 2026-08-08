@@ -260,3 +260,159 @@ table.data tbody tr:hover {
     display: none;
   }
 }
+
+.what-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--gold-bright);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.what-bubble {
+  width: min(20rem, 78vw);
+}
+
+.comic-strip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .comic-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .comic-strip {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.comic-panel {
+  padding: 0.9rem 1rem 1.05rem;
+  position: relative;
+  min-height: 8.5rem;
+}
+
+.comic-num {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.6rem;
+  color: var(--gold);
+  line-height: 1;
+  margin-bottom: 0.35rem;
+  opacity: 0.85;
+}
+
+.sale-tag {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.5rem;
+  padding: 0.45rem 0.55rem 0.5rem;
+  border-radius: 4px;
+  transform: rotate(-3deg);
+  border: 2px dashed currentColor;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.sale-tag--on {
+  color: #1a3d2a;
+  background: linear-gradient(160deg, #e8c86a, #c4a35a 55%, #b8923f);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.sale-tag--off {
+  color: var(--ink-muted);
+  background: var(--bg-elevated);
+  border-style: solid;
+  transform: rotate(0deg);
+}
+
+.sale-tag__eyebrow {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.sale-tag__big {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0.1rem 0;
+}
+
+.sale-tag__sub {
+  font-size: 0.62rem;
+  opacity: 0.85;
+}
+
+.coin-stack {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 28px;
+}
+
+.coin {
+  display: block;
+  border-radius: 999px;
+  border: 1px solid rgba(196, 163, 90, 0.55);
+  background: radial-gradient(circle at 30% 30%, #f0d78a, #b8923f 70%);
+  opacity: 0.25;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.coin--on {
+  opacity: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.bond-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 720px) {
+  .bond-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.bond-card {
+  padding: 1.1rem 1.15rem 1.15rem;
+  border-radius: 6px;
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+
+.bond-card--sale {
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--line));
+}
+
+.bond-card:hover {
+  transform: translateY(-1px);
+}
+
+.safety-note {
+  padding: 0.85rem 1rem;
+  border-color: color-mix(in srgb, var(--gold) 35%, var(--line));
+  background: color-mix(in srgb, var(--gold) 8%, var(--bg-panel));
+}
+
+.piggy {
+  font-size: 1.05rem;
+  line-height: 1;
+}

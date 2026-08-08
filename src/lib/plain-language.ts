@@ -1,38 +1,65 @@
 /** Display copy only — does not change calc/rules semantics. */
 
+export const CORE_METAPHOR =
+  "Gold bonds are like a coupon for real gold — and sometimes people sell that coupon for less than the gold is actually worth.";
+
 export const SIGNAL_COPY: Record<
   string,
-  { label: string; plain: string }
+  {
+    label: string;
+    friendly: string;
+    plain: string;
+    icon: string;
+    color: string;
+  }
 > = {
   strong_buy: {
     label: "Strong buy",
+    friendly: "Great deal right now",
     plain:
-      "This bond is trading well below the actual gold price, which historically narrows over time — buying here has typically paid off",
+      "This gold coupon is on a deep sale versus the actual gold price. Gaps like this have often narrowed over time — but gold can still go down, so only use money you can leave alone for years.",
+    icon: "🟢",
+    color: "var(--strong)",
   },
   buy: {
     label: "Buy",
+    friendly: "Okay deal",
     plain:
-      "Meaningfully cheaper than gold right now — a solid candidate if you want to put money to work",
+      "Meaningfully cheaper than the gold behind it — worth a look if you’re patiently building a holding.",
+    icon: "🟡",
+    color: "var(--buy)",
   },
   trickle: {
     label: "Trickle",
+    friendly: "Add a little",
     plain:
-      "Only a small gap vs gold — fine for a small top-up, not a large new purchase",
+      "Only a small sale versus gold. Fine for a tiny top-up, not a big new purchase.",
+    icon: "🔵",
+    color: "var(--hold)",
   },
   skip: {
     label: "Skip",
+    friendly: "Not today",
     plain:
-      "Costs more than gold right now — better to wait or put capital into a cheaper bond",
+      "This one’s selling above the gold price right now — not a great deal today. Look at cheaper batches instead.",
+    icon: "⚪",
+    color: "var(--skip)",
   },
   hold: {
     label: "Hold",
+    friendly: "Keep waiting",
     plain:
-      "If you already own it, the default is to keep it until payout — switching is rarely worth the hassle",
+      "If you already own it, the calm default is to keep it until payout day — switching is rarely worth the fuss.",
+    icon: "🟡",
+    color: "var(--hold)",
   },
   switch: {
     label: "Switch?",
+    friendly: "Maybe switch batches",
     plain:
-      "Another bond looks clearly cheaper after costs — only consider moving if the gap is large enough",
+      "Another batch looks clearly cheaper after costs. Only consider moving if the gap is large enough to bother.",
+    icon: "🟡",
+    color: "var(--warn)",
   },
 };
 
@@ -53,50 +80,79 @@ export function trustFromFlags(flags: {
   const thin = Boolean(Number(flags.thin));
 
   const thinNote = thin
-    ? "Few people are trading this bond right now — you may not get this exact price when you buy (thin liquidity)."
+    ? "Few people are trading this batch right now — you might not get exactly this price when you buy."
     : undefined;
 
   if (outlier) {
     return {
       level: "off",
-      label: "Data looks off — skip for now",
+      label: "Double-check this one",
       detail:
-        "This price looks unusually different from the other exchange — double-check before acting (outlier).",
+        "The price looks oddly different between exchanges. Pause and verify before acting.",
       thinNote,
     };
   }
   if (!verified) {
     return {
       level: "caution",
-      label: "Check before buying",
+      label: "Seen on one exchange only",
       detail:
-        "Price only seen on one exchange — treat with caution (unverified).",
+        "We’ve only spotted this price on one exchange so far — treat it gently and confirm before you buy.",
       thinNote,
     };
   }
   return {
     level: "confirmed",
-    label: "Confirmed",
-    detail: "Price confirmed on two exchanges (verified).",
+    label: "Price looks solid",
+    detail: "Two exchanges agree on this price — a good confidence check.",
     thinNote,
   };
 }
 
-/** Positive discount = cheaper than gold. */
 export function discountPlain(discountPct: number): {
   short: string;
   full: string;
+  saleLine: string;
 } {
   if (discountPct >= 0) {
     return {
-      short: `Cheaper than gold by ${discountPct.toFixed(2)}%`,
-      full: `Cheaper than gold price by ${discountPct.toFixed(2)}% (discount to fair value)`,
+      short: `On sale — ${discountPct.toFixed(1)}% extra gold value`,
+      full: `This gold coupon is on sale. You’re getting about ${discountPct.toFixed(2)}% more gold value for the same money (discount to fair value).`,
+      saleLine: `${discountPct.toFixed(1)}% EXTRA`,
     };
   }
   return {
-    short: "Costs more than gold price right now",
-    full: `Costs more than gold price right now by ${Math.abs(discountPct).toFixed(2)}% (premium to fair value)`,
+    short: "Selling above the gold price — not a great deal today",
+    full: `This batch costs about ${Math.abs(discountPct).toFixed(2)}% more than the gold behind it right now (a premium).`,
+    saleLine: `${Math.abs(discountPct).toFixed(1)}% OVER`,
   };
+}
+
+export function batchDisplayName(code: string): string {
+  // SGBFEB33 → Feb 2033 batch; SGBDE31III / SGBDEC31 → Dec 2031 batch
+  const m = code
+    .toUpperCase()
+    .match(/^SGB([A-Z]{2,3})(\d{2})([IVX]*)$/);
+  if (!m) return `${code} batch`;
+  const months: Record<string, string> = {
+    JAN: "Jan",
+    FEB: "Feb",
+    MAR: "Mar",
+    APR: "Apr",
+    MAY: "May",
+    JUN: "Jun",
+    JUL: "Jul",
+    AUG: "Aug",
+    SEP: "Sep",
+    OCT: "Oct",
+    NOV: "Nov",
+    DEC: "Dec",
+    DE: "Dec",
+  };
+  const mon = months[m[1]] || m[1];
+  const year = `20${m[2]}`;
+  const series = m[3] ? ` (${m[3]})` : "";
+  return `${mon} ${year}${series} batch`;
 }
 
 export function formatCountdown(years: number | null | undefined): string {
@@ -104,10 +160,10 @@ export function formatCountdown(years: number | null | undefined): string {
   const totalMonths = Math.max(0, Math.round(years * 12));
   const y = Math.floor(totalMonths / 12);
   const m = totalMonths % 12;
-  if (y === 0 && m === 0) return "Less than a month left";
-  if (y === 0) return `${m} month${m === 1 ? "" : "s"} left`;
-  if (m === 0) return `${y} year${y === 1 ? "" : "s"} left`;
-  return `${y} year${y === 1 ? "" : "s"} ${m} month${m === 1 ? "" : "s"} left`;
+  if (y === 0 && m === 0) return "Less than a month";
+  if (y === 0) return `${m} month${m === 1 ? "" : "s"}`;
+  if (m === 0) return `${y} year${y === 1 ? "" : "s"}`;
+  return `${y} year${y === 1 ? "" : "s"}, ${m} month${m === 1 ? "" : "s"}`;
 }
 
 export const LEARN_ARTICLES: {
@@ -118,29 +174,55 @@ export const LEARN_ARTICLES: {
   {
     id: "what-is-sgb",
     title: "What is a Sovereign Gold Bond?",
-    body: "A Sovereign Gold Bond (SGB) is a government bond linked to gold. You don’t store physical gold — you hold a bond that tracks gold’s price and pays a fixed 2.5% yearly interest (coupon) until it matures. After RBI stopped new issues, you can still buy existing bonds on the stock exchange (the secondary market).",
+    body: "Think of it as a coupon for gold, issued by the government. You don’t keep bars at home — you hold a bond that tracks gold’s price. RBI also pays a little yearly bonus (like interest on a savings account) until the batch matures. New batches stopped, but older ones still trade between people on the stock exchange.",
   },
   {
     id: "why-differ",
-    title: "Why do SGB prices differ from gold’s actual price?",
-    body: "Exchange prices reflect what buyers and sellers agree today, not a perfect gold calculator. Bonds can trade cheaper or pricier than the gold they represent because of taxes, how easy they are to trade, time left until payout, and day-to-day demand. That gap is the opportunity this app watches.",
+    title: "Why isn’t the price always equal to gold?",
+    body: "People buy and sell these coupons among themselves. Some days they’re eager to sell cheap; some days they ask for more. Taxes, how easy it is to trade, and how long until payout all nudge the price. This app watches for days when the coupon looks cheaper than the gold behind it.",
   },
   {
     id: "discount",
-    title: "What does “discount” mean for me as a buyer?",
-    body: "If a bond is cheaper than the gold price (a discount to fair value), you are paying less than the gold content suggests. That gap has often narrowed over time as the bond approaches payout — but it is not a guarantee. Always treat buy signals as a checklist, not a promise.",
+    title: "What does “on sale” mean for me?",
+    body: "If a batch is cheaper than the gold it represents, you’re paying less for that gold-linked value — like a store coupon on discount. That gap has often closed as payout day nears, but nothing is promised. Gold can fall, and you should only use money you can leave untouched for years.",
   },
   {
     id: "catch",
-    title: "What’s the catch — liquidity and risk",
-    body: "Some bonds barely trade (thin liquidity), so the listed price may not be the price you actually get. Gold can fall. Interest is taxed as income. And from April 2026, secondary-market buyers generally lose the old capital-gains exemption at maturity — you may owe tax on the gain portion.",
+    title: "What’s the catch?",
+    body: "Quiet batches (few traders) may not fill at the price you see. Gold prices can drop. The yearly bonus is taxed as income. And if you buy on the exchange (not at original RBI issue), capital-gains tax may apply on the gain at payout under rules from April 2026.",
   },
   {
     id: "taxes",
-    title: "How taxes work on SGBs bought in the secondary market",
-    body: "The fixed 2.5% yearly interest is taxed as income at your slab. From 1 Apr 2026, buying on the exchange (not at original RBI issue) usually means capital gains tax on the gain at redemption — not on the interest. Enter your own tax rates in Settings; this app never treats defaults as advice.",
+    title: "How do taxes work if I buy on the exchange?",
+    body: "The yearly bonus from RBI is taxed like interest. From 1 Apr 2026, secondary-market buyers usually pay capital gains tax on the gain at redemption — not on the bonus. Put your own tax rates in Settings; this app never treats defaults as advice.",
   },
 ];
 
-export const PAGE_WHAT_IS_THIS =
-  "Sovereign Gold Bonds (SGBs) are government bonds linked to gold that you can still buy on the stock exchange. Sometimes they trade cheaper or pricier than the actual gold price — this page ranks those gaps. Signals mean: Strong buy / Buy = worth a look when cheaper than gold; Skip = costs more than gold right now.";
+export const COMIC_PANELS = [
+  {
+    n: "1",
+    title: "RBI sold gold coupons",
+    body: "The government once sold bonds linked to gold — like coupons for real gold.",
+  },
+  {
+    n: "2",
+    title: "People trade them now",
+    body: "Those coupons still change hands on the stock exchange between regular folks.",
+  },
+  {
+    n: "3",
+    title: "Sometimes cheap, sometimes pricey",
+    body: "Sellers don’t always ask exactly the gold price — deals swing day to day.",
+  },
+  {
+    n: "4",
+    title: "This app spots the bargains",
+    body: "We rank when a coupon looks cheaper than the gold behind it — and when it doesn’t.",
+  },
+];
+
+export const BUY_SAFETY =
+  "This shows what’s cheap right now — it doesn’t guarantee gold prices will go up. Only invest money you can leave untouched for years.";
+
+export const EDUCATIONAL_NOTE =
+  "Learning mode: this tool explains how gold-bond coupons work. It does not place trades for you.";
