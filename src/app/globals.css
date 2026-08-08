@@ -197,3 +197,66 @@ table.data tbody tr:hover {
 .muted {
   color: var(--ink-muted);
 }
+
+.tip-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: help;
+  text-align: left;
+  border-bottom: 1px dotted color-mix(in srgb, currentColor 45%, transparent);
+}
+
+.tip-bubble {
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  top: calc(100% + 6px);
+  width: min(18rem, 70vw);
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.learn-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.learn-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(8, 10, 14, 0.55);
+  cursor: pointer;
+}
+
+.learn-drawer {
+  position: relative;
+  width: min(26rem, 100%);
+  height: 100%;
+  overflow-y: auto;
+  padding: 1.25rem 1.35rem 2rem;
+  border-radius: 0;
+  border-left: 1px solid var(--line);
+  animation: rise 0.35s ease both;
+}
+
+@media (max-width: 767px) {
+  .col-secondary {
+    display: none;
+  }
+}

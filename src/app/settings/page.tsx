@@ -18,8 +18,9 @@ export default async function SettingsPage() {
     <div className="pt-8">
       <h1 className="font-display text-4xl tracking-tight mb-2">Settings</h1>
       <p className="muted mb-4 max-w-2xl">
-        All rates and CAGR scenarios are explicit user inputs. Defaults are
-        starting points, not recommendations.
+        Set how much cash you’re willing to deploy, your tax rates, and gold
+        growth scenarios. These are <em>your</em> inputs — defaults are starting
+        points, not recommendations.
       </p>
       <SessionStamp sessionDate={sessionDate} />
       <div className="mt-4">
