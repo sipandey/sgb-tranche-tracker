@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { createClient, type Client, type InValue, type ResultSet } from "@libsql/client";
 import fs from "fs";
 import path from "path";
 import { DEFAULT_SETTINGS, SCHEMA_SQL } from "./schema";
@@ -7,82 +7,139 @@ import type { AppSettings } from "./types";
 
 export type { AppSettings } from "./types";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const DB_PATH = process.env.SGB_DB_PATH || path.join(DATA_DIR, "sgb.sqlite");
+let client: Client | null = null;
+let initPromise: Promise<Client> | null = null;
 
-let dbInstance: Database.Database | null = null;
+function resolveDbUrl(): { url: string; authToken?: string } {
+  const tursoUrl = process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN;
 
-export function getDb(): Database.Database {
-  if (dbInstance) return dbInstance;
-
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (tursoUrl) {
+    return { url: tursoUrl, authToken };
   }
 
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.exec(SCHEMA_SQL);
-  seedIfEmpty(db);
-  dbInstance = db;
-  return db;
+  const dataDir = path.join(/*turbopackIgnore: true*/ process.cwd(), "data");
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  const filePath =
+    process.env.SGB_DB_PATH || path.join(dataDir, "sgb.sqlite");
+  const abs = path.isAbsolute(filePath)
+    ? filePath
+    : path.join(/*turbopackIgnore: true*/ process.cwd(), filePath);
+  const dir = path.dirname(abs);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  // libsql file URLs need three slashes for absolute paths: file:///path
+  return { url: `file://${abs}` };
 }
 
-function seedIfEmpty(db: Database.Database) {
-  const row = db.prepare("SELECT COUNT(*) AS c FROM tranches").get() as { c: number };
-  if (row.c === 0) {
-    const insert = db.prepare(`
-      INSERT INTO tranches (
+export function getClient(): Client {
+  if (client) return client;
+  const { url, authToken } = resolveDbUrl();
+  client = createClient({ url, authToken });
+  return client;
+}
+
+export async function ensureDb(): Promise<Client> {
+  if (!initPromise) {
+    initPromise = (async () => {
+      const c = getClient();
+      await c.executeMultiple(SCHEMA_SQL);
+      await seedIfEmpty(c);
+      return c;
+    })();
+  }
+  return initPromise;
+}
+
+function rowObjects<T>(rs: ResultSet): T[] {
+  return rs.rows.map((row) => {
+    const obj: Record<string, unknown> = {};
+    for (const col of rs.columns) {
+      obj[col] = row[col];
+    }
+    return obj as T;
+  });
+}
+
+export async function queryAll<T>(
+  sql: string,
+  args: InValue[] = []
+): Promise<T[]> {
+  const c = await ensureDb();
+  const rs = await c.execute({ sql, args });
+  return rowObjects<T>(rs);
+}
+
+export async function queryOne<T>(
+  sql: string,
+  args: InValue[] = []
+): Promise<T | null> {
+  const rows = await queryAll<T>(sql, args);
+  return rows[0] ?? null;
+}
+
+export async function execute(
+  sql: string,
+  args: InValue[] = []
+): Promise<ResultSet> {
+  const c = await ensureDb();
+  return c.execute({ sql, args });
+}
+
+export async function batch(
+  statements: { sql: string; args?: InValue[] }[]
+): Promise<ResultSet[]> {
+  const c = await ensureDb();
+  return c.batch(
+    statements.map((s) => ({ sql: s.sql, args: s.args ?? [] })),
+    "write"
+  );
+}
+
+async function seedIfEmpty(c: Client) {
+  const countRs = await c.execute("SELECT COUNT(*) AS c FROM tranches");
+  const count = Number(countRs.rows[0]?.c ?? 0);
+  if (count === 0) {
+    const stmts = SEED_TRANCHES.map((t) => ({
+      sql: `INSERT INTO tranches (
         isin, tranche_code, nse_symbol, bse_scrip_code,
         issue_date, maturity_date, issue_price, coupon_pa, units_per_bond, active
-      ) VALUES (
-        @isin, @tranche_code, @nse_symbol, @bse_scrip_code,
-        @issue_date, @maturity_date, @issue_price, @coupon_pa, @units_per_bond, 1
-      )
-    `);
-    const tx = db.transaction(() => {
-      for (const t of SEED_TRANCHES) {
-        insert.run({
-          isin: t.isin,
-          tranche_code: t.tranche_code,
-          nse_symbol: t.nse_symbol,
-          bse_scrip_code: t.bse_scrip_code ?? null,
-          issue_date: t.issue_date,
-          maturity_date: t.maturity_date,
-          issue_price: t.issue_price,
-          coupon_pa: t.coupon_pa ?? 2.5,
-          units_per_bond: t.units_per_bond ?? 1.0,
-        });
-      }
-    });
-    tx();
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      args: [
+        t.isin,
+        t.tranche_code,
+        t.nse_symbol,
+        t.bse_scrip_code ?? null,
+        t.issue_date,
+        t.maturity_date,
+        t.issue_price,
+        t.coupon_pa ?? 2.5,
+        t.units_per_bond ?? 1.0,
+      ] as InValue[],
+    }));
+    await c.batch(stmts, "write");
   }
 
-  const upsert = db.prepare(`
-    INSERT INTO settings (key, value) VALUES (?, ?)
-    ON CONFLICT(key) DO NOTHING
-  `);
-  const txSettings = db.transaction(() => {
-    for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
-      upsert.run(k, v);
-    }
-  });
-  txSettings();
+  const settingStmts = Object.entries(DEFAULT_SETTINGS).map(([k, v]) => ({
+    sql: `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`,
+    args: [k, v] as InValue[],
+  }));
+  await c.batch(settingStmts, "write");
 }
 
 export function closeDb() {
-  if (dbInstance) {
-    dbInstance.close();
-    dbInstance = null;
+  if (client) {
+    client.close();
+    client = null;
+    initPromise = null;
   }
 }
 
-export function getSettings(): AppSettings {
-  const db = getDb();
-  const rows = db.prepare("SELECT key, value FROM settings").all() as {
-    key: string;
-    value: string;
-  }[];
+export async function getSettings(): Promise<AppSettings> {
+  const rows = await queryAll<{ key: string; value: string }>(
+    "SELECT key, value FROM settings"
+  );
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
   return {
@@ -114,49 +171,52 @@ export function getSettings(): AppSettings {
   };
 }
 
-export function setSetting(key: string, value: string) {
-  const db = getDb();
-  db.prepare(
+export async function setSetting(key: string, value: string) {
+  await execute(
     `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
-  ).run(key, value);
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    [key, value]
+  );
 }
 
-export function updateSettings(partial: Partial<AppSettings>) {
+export async function updateSettings(partial: Partial<AppSettings>) {
   if (partial.dry_powder_inr !== undefined) {
-    setSetting("dry_powder_inr", String(partial.dry_powder_inr));
+    await setSetting("dry_powder_inr", String(partial.dry_powder_inr));
   }
   if (partial.dry_powder_remaining_inr !== undefined) {
-    setSetting("dry_powder_remaining_inr", String(partial.dry_powder_remaining_inr));
+    await setSetting("dry_powder_remaining_inr", String(partial.dry_powder_remaining_inr));
   }
   if (partial.cg_tax_rate_pct !== undefined) {
-    setSetting("cg_tax_rate_pct", String(partial.cg_tax_rate_pct));
+    await setSetting("cg_tax_rate_pct", String(partial.cg_tax_rate_pct));
   }
   if (partial.income_tax_slab_pct !== undefined) {
-    setSetting("income_tax_slab_pct", String(partial.income_tax_slab_pct));
+    await setSetting("income_tax_slab_pct", String(partial.income_tax_slab_pct));
   }
   if (partial.gold_cagr_scenarios !== undefined) {
-    setSetting("gold_cagr_scenarios", JSON.stringify(partial.gold_cagr_scenarios));
+    await setSetting("gold_cagr_scenarios", JSON.stringify(partial.gold_cagr_scenarios));
   }
   if (partial.switch_threshold_pct !== undefined) {
-    setSetting("switch_threshold_pct", String(partial.switch_threshold_pct));
+    await setSetting("switch_threshold_pct", String(partial.switch_threshold_pct));
   }
   if (partial.watched_isins !== undefined) {
-    setSetting("watched_isins", JSON.stringify(partial.watched_isins));
+    await setSetting("watched_isins", JSON.stringify(partial.watched_isins));
   }
   if (partial.min_volume_for_large_deploy !== undefined) {
-    setSetting("min_volume_for_large_deploy", String(partial.min_volume_for_large_deploy));
+    await setSetting(
+      "min_volume_for_large_deploy",
+      String(partial.min_volume_for_large_deploy)
+    );
   }
   if (partial.price_outlier_threshold_pct !== undefined) {
-    setSetting(
+    await setSetting(
       "price_outlier_threshold_pct",
       String(partial.price_outlier_threshold_pct)
     );
   }
   if (partial.ibja_access_token !== undefined) {
-    setSetting("ibja_access_token", partial.ibja_access_token);
+    await setSetting("ibja_access_token", partial.ibja_access_token);
   }
   if (partial.last_session_date !== undefined) {
-    setSetting("last_session_date", partial.last_session_date);
+    await setSetting("last_session_date", partial.last_session_date);
   }
 }

@@ -7,113 +7,103 @@ Single-user Next.js app that tracks actively traded Sovereign Gold Bond (SGB) tr
 ## Stack
 
 - Next.js (App Router) + TypeScript + Tailwind
-- SQLite via `better-sqlite3` (file DB — needs a **persistent disk** in cloud)
+- **LibSQL / Turso** (local `file:` DB in dev; remote Turso on Vercel)
 - Ingest: NSE bhavcopy + BSE UDiFF, IBJA scrape or paid API
-- Docker image + Railway / Render blueprints included
 
 ## Quick start (local)
 
 ```bash
 npm install
-npm run ingest:demo    # seed a demo session if live feeds are blocked
+npm run ingest:demo
 npm run dev            # http://localhost:3000
 ```
 
-Or with Docker Compose:
-
-```bash
-docker compose up --build
-# open http://localhost:3000
-```
+Uses a local SQLite file at `data/sgb.sqlite` when Turso env vars are unset.
 
 ## Environment
 
 | Variable | Purpose |
 |----------|---------|
-| `PORT` | Listen port (default `3000`; cloud hosts set this) |
-| `SGB_DB_PATH` | SQLite path (use `/data/sgb.sqlite` on cloud volumes) |
-| `SGB_SEED_DEMO` | Set `1` to seed demo data on first boot if DB file missing |
-| `IBJA_ACCESS_TOKEN` | Official IBJA gold rates API (preferred over scrape) |
+| `TURSO_DATABASE_URL` | Turso/libSQL URL (`libsql://…`) — **required on Vercel** |
+| `TURSO_AUTH_TOKEN` | Turso auth token — **required on Vercel** |
+| `SGB_DB_PATH` | Local file path when not using Turso (default `data/sgb.sqlite`) |
+| `IBJA_ACCESS_TOKEN` | Optional official IBJA gold API token |
+| `PORT` | Listen port for `npm start` / Docker |
 
-You can also paste the IBJA token in **Settings**.
+Copy `.env.example` → `.env.local` for local overrides.
 
 ---
 
-## Deploy to Railway (recommended)
+## Free cloud deploy: Vercel + Turso
 
-SQLite needs a persistent volume. Do **not** use a serverless-only host without a disk.
+### A. Create a free Turso database
 
-### Exact steps
+1. Install the CLI (once):
+   ```bash
+   curl -sSfL https://get.tur.so/install.sh | bash
+   ```
+2. Sign up / log in:
+   ```bash
+   turso auth login
+   ```
+3. Create a DB (free tier):
+   ```bash
+   turso db create sgb-tracker
+   ```
+4. Copy the URL:
+   ```bash
+   turso db show sgb-tracker --url
+   ```
+5. Create a token:
+   ```bash
+   turso db tokens create sgb-tracker
+   ```
+   Save the URL and token — you need both in Vercel.
 
-1. Push this branch to GitHub (already on `cursor/sgb-tranche-tracker-c0c9` / merge to `main` if you prefer).
-2. Go to [https://railway.app](https://railway.app) → **Login** → **New Project**.
-3. Choose **Deploy from GitHub repo** → select `sipandey/sgb-tranche-tracker`.
-4. Pick branch `main` (or `cursor/sgb-tranche-tracker-c0c9`).
-5. Railway should detect `Dockerfile` / `railway.toml`. If prompted for builder, choose **Dockerfile**.
-6. Open the service → **Variables** and set:
+### B. Deploy on Vercel (Hobby / free)
+
+1. Push this branch / merge to GitHub (`sipandey/sgb-tranche-tracker`).
+2. Go to [https://vercel.com/new](https://vercel.com/new) → **Import** the GitHub repo.
+3. Framework: **Next.js** (auto-detected). Leave build as default (`next build`).
+4. **Environment Variables** → add:
 
    | Name | Value |
    |------|--------|
-   | `PORT` | `3000` |
-   | `SGB_DB_PATH` | `/data/sgb.sqlite` |
-   | `SGB_SEED_DEMO` | `1` |
-   | `IBJA_ACCESS_TOKEN` | *(optional)* your token |
+   | `TURSO_DATABASE_URL` | `libsql://…` from `turso db show` |
+   | `TURSO_AUTH_TOKEN` | token from `turso db tokens create` |
+   | `IBJA_ACCESS_TOKEN` | optional |
 
-7. Attach a volume (required):
-   - Service → **Settings** → **Volumes** → **Add Volume**
-   - Mount path: `/data`
-   - Size: `1 GB` is enough
-8. **Settings** → **Networking** → **Generate Domain** (gives a `*.up.railway.app` URL).
-9. Wait for the deploy to finish (Build → Deploy green).
-10. Open the public URL → you should see **SGB Tracker** with a demo or live session.
-11. In-app smoke test:
-    - Dashboard ranking loads
-    - Open a tranche detail row
-    - **Settings → Run ingest now**
-    - **Positions → Add lot**
-    - Check **Buy log**
+5. Click **Deploy**. Wait for the build to finish.
+6. Open the `*.vercel.app` URL.
 
-Optional one-off shell ingest (Railway → service → shell if available):
+### C. First-run smoke test
+
+1. Homepage should load **SGB Tracker** (auto-seeds demo data if the DB is empty / live feeds fail).
+2. Open a tranche from the discount ranking.
+3. **Settings → Run ingest now** (may use demo fallback if NSE/BSE/IBJA are blocked from Vercel’s region).
+4. **Positions → Add lot** → confirm it persists after refresh (proves Turso writes work).
+5. Check **Buy log**.
+
+Schema + tranche seed run automatically on first DB connection.
+
+### Optional: point local dev at Turso
 
 ```bash
-npm run ingest
-# or
-npm run ingest:demo
+# .env.local
+TURSO_DATABASE_URL=libsql://…
+TURSO_AUTH_TOKEN=…
+npm run dev
 ```
 
 ---
 
-## Deploy to Render
+## Paid / self-host alternatives (Docker)
 
-1. Go to [https://dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint**.
-2. Connect GitHub → select `sipandey/sgb-tranche-tracker`.
-3. Render reads `render.yaml` (Docker web service + `/data` disk).
-4. Apply the blueprint. When asked, you may set `IBJA_ACCESS_TOKEN` (optional).
-5. After deploy, open the `*.onrender.com` URL.
-6. Same in-app smoke test as Railway (dashboard → tranche → ingest → positions).
-
-Manual alternative (no Blueprint): **New Web Service** → Docker → repo → set env vars above → add **Persistent Disk** mount `/data` size 1 GB.
-
----
-
-## Deploy with plain Docker (any VPS)
+`Dockerfile`, `railway.toml`, and `render.yaml` remain for hosts with a persistent disk. Prefer **Vercel + Turso** for the free path.
 
 ```bash
-git clone https://github.com/sipandey/sgb-tranche-tracker.git
-cd sgb-tranche-tracker
-docker build -t sgb-tracker .
-docker run -d --name sgb \
-  -p 3000:3000 \
-  -e PORT=3000 \
-  -e SGB_DB_PATH=/data/sgb.sqlite \
-  -e SGB_SEED_DEMO=1 \
-  -v sgb-data:/data \
-  sgb-tracker
+docker compose up --build   # local Docker parity
 ```
-
-Open `http://YOUR_SERVER_IP:3000`.
-
----
 
 ## Features
 
@@ -130,13 +120,10 @@ From 1 April 2026, capital gains exemption on maturity applies only to original 
 ## Scripts
 
 ```bash
-npm run test:calc      # unit checks for fair value / YTM / XIRR / rules
-npm run ingest:demo    # force demo session
-npm run worker         # weekday scheduled ingest
+npm run test:calc
+npm run ingest:demo
+npm run ingest
+npm run worker
 npm run lint
 npm run build
 ```
-
-## Why not Vercel (as configured)
-
-This app stores state in a local SQLite file. Vercel’s serverless filesystem is ephemeral. Use Railway, Render, Fly, or a VPS with a volume — or later migrate the DB to Turso/libSQL if you want serverless.

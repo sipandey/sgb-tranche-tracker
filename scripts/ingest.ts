@@ -13,7 +13,7 @@ async function main() {
 
   if (forceDemo) {
     const { seedDemoSession } = await import("../src/lib/ingest/demo");
-    const result = seedDemoSession(preferDate || "2026-08-07");
+    const result = await seedDemoSession(preferDate || "2026-08-07");
     console.log(JSON.stringify(result, null, 2));
   } else {
     const result = await runIngest(preferDate);

@@ -6,10 +6,10 @@ import { SessionStamp } from "@/components/SessionStamp";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
-  const settings = getSettings();
-  const sessionDate = getLastSessionDate();
-  const tranches = getActiveTranches().map((t) => ({
+export default async function SettingsPage() {
+  const settings = await getSettings();
+  const sessionDate = await getLastSessionDate();
+  const tranches = (await getActiveTranches()).map((t) => ({
     isin: t.isin,
     tranche_code: t.tranche_code,
   }));

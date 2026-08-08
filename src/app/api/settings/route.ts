@@ -5,13 +5,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ settings: getSettings() });
+  return NextResponse.json({ settings: await getSettings() });
 }
 
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    updateSettings({
+    await updateSettings({
       dry_powder_inr: num(body.dry_powder_inr),
       dry_powder_remaining_inr: num(body.dry_powder_remaining_inr),
       cg_tax_rate_pct: num(body.cg_tax_rate_pct),
@@ -30,7 +30,7 @@ export async function PUT(req: Request) {
         ? body.watched_isins.map(String)
         : undefined,
     });
-    return NextResponse.json({ settings: getSettings() });
+    return NextResponse.json({ settings: await getSettings() });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Update failed" },

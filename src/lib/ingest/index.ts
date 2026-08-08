@@ -13,9 +13,13 @@ export type IngestResult = {
   nse: { count: number; error?: string };
   bse: { count: number; error?: string };
   gold: { ok: boolean; rate?: number; source?: string; error?: string };
-  crossCheck: { verified: number; outliers: number; singleSource: number } | null;
+  crossCheck: {
+    verified: number;
+    outliers: number;
+    singleSource: number;
+  } | null;
   metrics: number;
-  rules: ReturnType<typeof runRulesForSession> | null;
+  rules: Awaited<ReturnType<typeof runRulesForSession>> | null;
   errors: string[];
   demo?: boolean;
 };
@@ -30,7 +34,6 @@ export async function runIngest(
   const nse = await ingestNsePrices(preferDate);
   if (nse.error) errors.push(`NSE: ${nse.error}`);
 
-  // Prefer aligning BSE to NSE session when NSE succeeded
   const bse = await ingestBsePrices(nse.sessionDate ?? preferDate);
   if (bse.error) errors.push(`BSE: ${bse.error}`);
 
@@ -44,9 +47,8 @@ export async function runIngest(
   let rules = null;
   let demo = false;
 
-  // Fallback to demo data if live feeds produced nothing usable
   if ((!sessionDate || !gold.ok) && allowDemo) {
-    const seeded = seedDemoSession(preferDate || "2026-08-07");
+    const seeded = await seedDemoSession(preferDate || "2026-08-07");
     sessionDate = seeded.sessionDate;
     metrics = seeded.metrics;
     demo = true;
@@ -59,7 +61,12 @@ export async function runIngest(
       },
     };
     errors.push("Live feeds incomplete — loaded demo session for UI");
-    rules = { sessionDate, rankedCount: metrics, suggestions: 0, alerts: 0 };
+    rules = {
+      sessionDate,
+      rankedCount: metrics,
+      suggestions: 0,
+      alerts: 0,
+    };
     return {
       ok: true,
       sessionDate,
@@ -80,11 +87,11 @@ export async function runIngest(
   }
 
   if (sessionDate) {
-    updateSettings({ last_session_date: sessionDate });
-    crossCheck = crossCheckPrices(sessionDate);
+    await updateSettings({ last_session_date: sessionDate });
+    crossCheck = await crossCheckPrices(sessionDate);
     if (gold.ok) {
-      metrics = materializeDailyMetrics(sessionDate);
-      rules = runRulesForSession(sessionDate);
+      metrics = await materializeDailyMetrics(sessionDate);
+      rules = await runRulesForSession(sessionDate);
     }
   }
 

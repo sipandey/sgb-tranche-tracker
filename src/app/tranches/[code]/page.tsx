@@ -22,34 +22,34 @@ export default async function TrancheDetailPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const tranche = getTrancheByCode(decodeURIComponent(code));
+  const tranche = await getTrancheByCode(decodeURIComponent(code));
   if (!tranche) notFound();
 
-  const sessionDate = getLastSessionDate();
+  const sessionDate = await getLastSessionDate();
   if (!sessionDate) notFound();
 
-  const metrics = getTrancheMetrics(tranche.isin, sessionDate);
-  const settings = getSettings();
-  const gold = getLatestGold(sessionDate);
-  const history = getMetricsHistory(tranche.isin, 30);
+  const metrics = await getTrancheMetrics(tranche.isin, sessionDate);
+  const settings = await getSettings();
+  const gold = await getLatestGold(sessionDate);
+  const history = await getMetricsHistory(tranche.isin, 30);
 
   const scenarios = settings.gold_cagr_scenarios.map((cagrPct) => {
     if (!metrics || !tranche.maturity_date || !tranche.issue_price) {
       return { cagrPct, ytm: null, redemption: null, postTax: null };
     }
-    const years = metrics.years_to_maturity ?? 0;
+    const years = Number(metrics.years_to_maturity ?? 0);
     const result = ytmForCagr({
-      marketPrice: metrics.market_price,
-      issuePrice: tranche.issue_price,
-      couponPa: tranche.coupon_pa,
+      marketPrice: Number(metrics.market_price),
+      issuePrice: Number(tranche.issue_price),
+      couponPa: Number(tranche.coupon_pa),
       sessionDate,
       maturityDate: tranche.maturity_date,
-      currentFairValue: metrics.fair_value,
+      currentFairValue: Number(metrics.fair_value),
       goldCagr: cagrPct / 100,
       yearsToMaturity: years,
     });
     const postTax = netRedemptionAfterCgTax(
-      metrics.market_price,
+      Number(metrics.market_price),
       result.redemption,
       settings.cg_tax_rate_pct
     );

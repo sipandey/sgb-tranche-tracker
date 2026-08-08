@@ -15,19 +15,19 @@ import { RefreshButton } from "@/components/RefreshButton";
 
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
-  let sessionDate = getLastSessionDate();
+export default async function DashboardPage() {
+  let sessionDate = await getLastSessionDate();
   let demo = false;
   if (!sessionDate) {
-    const seeded = seedDemoSession();
+    const seeded = await seedDemoSession();
     sessionDate = seeded.sessionDate;
     demo = true;
   }
 
-  const ranking = getDiscountRanking(sessionDate);
-  const settings = getSettings();
-  const gold = getLatestGold(sessionDate);
-  const alerts = getAlerts(true, 8) as {
+  const ranking = await getDiscountRanking(sessionDate);
+  const settings = await getSettings();
+  const gold = await getLatestGold(sessionDate);
+  const alerts = (await getAlerts(true, 8)) as {
     id: number;
     tranche_code: string | null;
     message: string;
@@ -100,7 +100,7 @@ export default function DashboardPage() {
               <li key={a.id} className="flex justify-between gap-4">
                 <span>{a.message}</span>
                 <span className="num text-[var(--buy)]">
-                  {formatPct(a.discount_pct)}
+                  {formatPct(Number(a.discount_pct))}
                 </span>
               </li>
             ))}
@@ -143,27 +143,33 @@ export default function DashboardPage() {
                   </td>
                   <td
                     className={`num ${
-                      r.discount_pct >= 0
+                      Number(r.discount_pct) >= 0
                         ? "text-[var(--buy)]"
                         : "text-[var(--skip)]"
                     }`}
                   >
-                    {formatPct(r.discount_pct)}
+                    {formatPct(Number(r.discount_pct))}
                   </td>
-                  <td className="num">₹{formatInr(r.market_price)}</td>
-                  <td className="num">₹{formatInr(r.fair_value)}</td>
-                  <td className="num">{formatInr(r.volume, 0)}</td>
-                  <td className="num">{formatYears(r.years_to_maturity)}</td>
+                  <td className="num">₹{formatInr(Number(r.market_price))}</td>
+                  <td className="num">₹{formatInr(Number(r.fair_value))}</td>
+                  <td className="num">{formatInr(Number(r.volume), 0)}</td>
+                  <td className="num">
+                    {formatYears(
+                      r.years_to_maturity == null
+                        ? null
+                        : Number(r.years_to_maturity)
+                    )}
+                  </td>
                   <td className="text-xs">
-                    {r.price_verified ? (
+                    {Number(r.price_verified) ? (
                       <span className="text-[var(--buy)]">verified</span>
                     ) : (
                       <span className="text-[var(--warn)]">unverified</span>
                     )}
-                    {r.price_outlier ? (
+                    {Number(r.price_outlier) ? (
                       <span className="text-[var(--skip)]"> · outlier</span>
                     ) : null}
-                    {!r.liquidity_ok ? (
+                    {!Number(r.liquidity_ok) ? (
                       <span className="muted"> · thin</span>
                     ) : null}
                   </td>

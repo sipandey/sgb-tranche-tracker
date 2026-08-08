@@ -6,9 +6,9 @@ import { formatInr, formatPct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default function LogPage() {
-  const logs = getActionLog(300);
-  const sessionDate = getLastSessionDate();
+export default async function LogPage() {
+  const logs = await getActionLog(300);
+  const sessionDate = await getLastSessionDate();
 
   // Group by YYYY-MM
   const months = new Map<string, typeof logs>();
