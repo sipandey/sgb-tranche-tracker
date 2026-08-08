@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: sgb-tranche-tracker
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: SGB_DB_PATH
+        value: /data/sgb.sqlite
+      - key: SGB_SEED_DEMO
+        value: "1"
+      - key: IBJA_ACCESS_TOKEN
+        sync: false
+    disk:
+      name: sgb-data
+      mountPath: /data
+      sizeGB: 1
