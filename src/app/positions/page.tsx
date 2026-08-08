@@ -143,10 +143,11 @@ export default async function PositionsPage() {
 
   return (
     <div className="pt-8">
-      <h1 className="font-display text-4xl tracking-tight mb-2">Positions</h1>
+      <h1 className="font-display text-4xl tracking-tight mb-2">My holdings</h1>
       <p className="muted mb-4 max-w-2xl">
-        Track lots per tranche with cost basis, unrealized P/L, and projected
-        redemption under your gold CAGR assumption ({rows[0]?.cagr ?? 8}% shown).
+        What you own, what you paid, how you’re doing vs today’s market and vs
+        gold, and your real yearly return (XIRR) — before and after your capital
+        gains tax assumption ({rows[0]?.cagr ?? 8}% gold-growth scenario shown).
       </p>
       <SessionStamp
         sessionDate={sessionDate}
@@ -164,15 +165,17 @@ export default async function PositionsPage() {
           <table className="data">
             <thead>
               <tr>
-                <th>Tranche</th>
+                <th>Bond</th>
                 <th>Units</th>
-                <th>Avg cost</th>
-                <th>Mkt value</th>
-                <th>U. P/L (mkt)</th>
-                <th>U. P/L (FV)</th>
-                <th>Proj. redeem</th>
-                <th>After CG</th>
-                <th>XIRR pre/post</th>
+                <th>Avg price paid</th>
+                <th>Worth today</th>
+                <th>Gain/loss vs market</th>
+                <th>Gain/loss vs gold</th>
+                <th>Projected payout</th>
+                <th>After tax</th>
+                <th title="Your real yearly return, accounting for the coupon and how long your money was invested (XIRR)">
+                  Real yearly return
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -205,34 +208,41 @@ export default async function PositionsPage() {
                     {r.xirrPre == null ? "—" : formatPct(r.xirrPre * 100)}
                     {" / "}
                     {r.xirrPost == null ? "—" : formatPct(r.xirrPost * 100)}
+                    <span className="block muted normal-case tracking-normal">
+                      before / after tax
+                    </span>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="muted text-center py-8">
-                    No lots yet — add a purchase above.
+                    No holdings yet — add a purchase above.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <p className="px-4 py-3 text-xs muted">
+          “Real yearly return” accounts for the fixed 2.5% yearly interest
+          (coupon) and how long your money was invested (XIRR).
+        </p>
       </section>
 
       {lots.length > 0 && (
         <section className="panel mt-6">
           <div className="px-4 pt-4 pb-2">
-            <h2 className="font-display text-xl">Lots</h2>
+            <h2 className="font-display text-xl">Purchase lots</h2>
           </div>
           <div className="table-wrap">
             <table className="data">
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Tranche</th>
+                  <th>Bond</th>
                   <th>Units</th>
-                  <th>Cost/unit</th>
+                  <th>Price paid / unit</th>
                   <th>Notes</th>
                 </tr>
               </thead>

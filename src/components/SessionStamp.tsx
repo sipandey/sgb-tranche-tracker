@@ -12,15 +12,15 @@ export function SessionStamp({
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm muted">
       <span>
-        As of last session{" "}
+        Prices as of last trading day{" "}
         <span className="num text-[var(--ink)]">
           {sessionDate ?? "—"}
         </span>
-        {!sessionDate && " (no trading data yet)"}
+        {!sessionDate && " (no market data yet)"}
       </span>
       {goldRate != null && (
         <span>
-          IBJA 999{" "}
+          Actual gold price (IBJA 999){" "}
           <span className="num text-[var(--gold-bright)]">
             ₹{goldRate.toLocaleString("en-IN")}/10g
           </span>
@@ -28,7 +28,9 @@ export function SessionStamp({
         </span>
       )}
       {demo && (
-        <span className="text-[var(--warn)]">Demo data — live feeds unavailable</span>
+        <span className="text-[var(--warn)]">
+          Sample data — live market feeds were unavailable
+        </span>
       )}
     </div>
   );

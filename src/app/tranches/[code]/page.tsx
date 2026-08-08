@@ -12,7 +12,11 @@ import { ytmForCagr, netRedemptionAfterCgTax } from "@/lib/calc";
 import { DisclaimerBanner } from "@/components/Disclaimer";
 import { SessionStamp } from "@/components/SessionStamp";
 import { SignalBadge } from "@/components/SignalBadge";
-import { formatInr, formatPct, formatYears } from "@/lib/format";
+import { DiscountLabel } from "@/components/DiscountLabel";
+import { TrustBadge } from "@/components/TrustBadge";
+import { YearsLeft } from "@/components/YearsLeft";
+import { PageExplainer } from "@/components/PageExplainer";
+import { formatInr, formatPct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +68,7 @@ export default async function TrancheDetailPage({
   return (
     <div className="pt-8">
       <Link href="/#ranking" className="text-sm muted hover:text-[var(--ink)]">
-        ← Ranking
+        ← Back to bonds list
       </Link>
       <header className="mt-4 mb-6 animate-rise">
         <h1 className="font-display text-4xl tracking-tight mb-2">
@@ -78,24 +82,41 @@ export default async function TrancheDetailPage({
         />
       </header>
 
+      <PageExplainer title="What is this bond page?">
+        <p>
+          This is one Sovereign Gold Bond series on the exchange. Compare its
+          market price to the actual gold price, see how long until it pays out,
+          and explore yearly-return scenarios under gold-growth assumptions{" "}
+          <em>you</em> choose.
+        </p>
+      </PageExplainer>
+
       <DisclaimerBanner />
 
       {metrics && (
-        <section className="grid sm:grid-cols-4 gap-3 mb-8">
-          <Stat label="Market" value={`₹${formatInr(metrics.market_price)}`} />
-          <Stat label="Fair value" value={`₹${formatInr(metrics.fair_value)}`} />
+        <section className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           <Stat
-            label="Discount"
-            value={formatPct(metrics.discount_pct)}
-            accent={metrics.discount_pct >= 0 ? "buy" : "skip"}
+            label="Market price"
+            value={`₹${formatInr(Number(metrics.market_price))}`}
           />
+          <Stat
+            label="Gold-linked value"
+            hint="fair value"
+            value={`₹${formatInr(Number(metrics.fair_value))}`}
+          />
+          <div className="panel p-4">
+            <div className="label">vs gold price</div>
+            <div className="mt-1 text-sm">
+              <DiscountLabel discountPct={Number(metrics.discount_pct)} />
+            </div>
+          </div>
           <div className="panel p-4">
             <div className="label">Signal</div>
             <div className="mt-1">
-              <SignalBadge signal={metrics.signal} />
+              <SignalBadge signal={metrics.signal} showExplain />
             </div>
             <div className="text-xs muted mt-2">
-              {formatYears(metrics.years_to_maturity)} to maturity
+              <YearsLeft years={metrics.years_to_maturity} />
             </div>
           </div>
         </section>
@@ -103,49 +124,60 @@ export default async function TrancheDetailPage({
 
       <section className="panel p-4 mb-8 grid sm:grid-cols-2 gap-4 text-sm">
         <div>
-          <div className="label">Issue</div>
+          <div className="label">When it was issued</div>
           <p>
-            {tranche.issue_date ?? "—"} · issue price ₹
-            {formatInr(tranche.issue_price)} · coupon {tranche.coupon_pa}% p.a.
+            {tranche.issue_date ?? "—"} · original issue price ₹
+            {formatInr(tranche.issue_price)} · fixed{" "}
+            {tranche.coupon_pa}% yearly interest RBI pays (coupon)
           </p>
         </div>
         <div>
-          <div className="label">Maturity</div>
+          <div className="label">When it pays out</div>
           <p>
-            {tranche.maturity_date ?? "—"} · {tranche.units_per_bond}g / unit
+            {tranche.maturity_date ?? "—"} · {tranche.units_per_bond}g of gold
+            per unit
           </p>
         </div>
-        <div className="sm:col-span-2 text-xs muted">
-          Flags:{" "}
-          {metrics?.price_verified ? "verified dual-source" : "unverified single source"}
-          {metrics?.price_outlier ? " · exchange outlier flagged" : ""}
-          {metrics && !metrics.liquidity_ok ? " · thin volume" : ""}
+        <div className="sm:col-span-2">
+          <div className="label">Price confidence</div>
+          {metrics ? (
+            <TrustBadge
+              verified={metrics.price_verified}
+              outlier={metrics.price_outlier}
+              thin={!metrics.liquidity_ok}
+            />
+          ) : (
+            <span className="muted">—</span>
+          )}
         </div>
       </section>
 
       <section className="panel mb-8">
         <div className="px-4 pt-4 pb-2">
-          <h2 className="font-display text-2xl">YTM scenarios</h2>
+          <h2 className="font-display text-2xl">
+            Yearly return if gold grows at…
+          </h2>
           <p className="text-xs muted mt-1">
-            Gold CAGR assumptions are your inputs. Redemption projected from
-            current fair value. Post-tax applies your CG rate to the gain portion
-            only (secondary purchase).
+            These are scenarios using <em>your</em> assumed gold growth rates —
+            not forecasts. “Yearly return” here is the internal rate of return
+            before tax. “After tax” applies your capital-gains rate to the gain
+            portion only (secondary-market purchase).
           </p>
         </div>
         <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
-                <th>Gold CAGR</th>
-                <th>YTM (pre-tax)</th>
-                <th>Proj. redemption</th>
-                <th>After CG tax</th>
+                <th>If gold grows</th>
+                <th>Yearly return (before tax)</th>
+                <th>Projected payout</th>
+                <th>After capital-gains tax</th>
               </tr>
             </thead>
             <tbody>
               {scenarios.map((s) => (
                 <tr key={s.cagrPct}>
-                  <td className="num">{s.cagrPct}%</td>
+                  <td className="num">{s.cagrPct}% / year</td>
                   <td className="num">
                     {s.ytm == null ? "—" : formatPct(s.ytm * 100)}
                   </td>
@@ -157,7 +189,7 @@ export default async function TrancheDetailPage({
           </table>
         </div>
         <p className="px-4 py-3 text-xs muted">
-          Adjust CAGR list and tax rates in{" "}
+          Change growth scenarios and tax rates in{" "}
           <Link href="/settings" className="text-[var(--gold-bright)]">
             Settings
           </Link>
@@ -167,17 +199,17 @@ export default async function TrancheDetailPage({
 
       <section className="panel">
         <div className="px-4 pt-4 pb-2">
-          <h2 className="font-display text-2xl">Recent sessions</h2>
+          <h2 className="font-display text-2xl">Recent trading days</h2>
         </div>
         <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
-                <th>Session</th>
+                <th>Trading day</th>
                 <th>Price</th>
-                <th>Fair value</th>
-                <th>Discount</th>
-                <th>Volume</th>
+                <th>Gold-linked value</th>
+                <th>vs gold</th>
+                <th>Activity</th>
                 <th>Signal</th>
               </tr>
             </thead>
@@ -185,10 +217,15 @@ export default async function TrancheDetailPage({
               {history.map((h) => (
                 <tr key={h.session_date}>
                   <td className="num">{h.session_date}</td>
-                  <td className="num">₹{formatInr(h.market_price)}</td>
-                  <td className="num">₹{formatInr(h.fair_value)}</td>
-                  <td className="num">{formatPct(h.discount_pct)}</td>
-                  <td className="num">{formatInr(h.volume, 0)}</td>
+                  <td className="num">₹{formatInr(Number(h.market_price))}</td>
+                  <td className="num">₹{formatInr(Number(h.fair_value))}</td>
+                  <td>
+                    <DiscountLabel
+                      discountPct={Number(h.discount_pct)}
+                      compact
+                    />
+                  </td>
+                  <td className="num">{formatInr(Number(h.volume), 0)}</td>
                   <td>
                     <SignalBadge signal={h.signal} />
                   </td>
@@ -205,10 +242,12 @@ export default async function TrancheDetailPage({
 function Stat({
   label,
   value,
+  hint,
   accent,
 }: {
   label: string;
   value: string;
+  hint?: string;
   accent?: "buy" | "skip";
 }) {
   const color =
@@ -219,7 +258,10 @@ function Stat({
         : "text-[var(--ink)]";
   return (
     <div className="panel p-4">
-      <div className="label">{label}</div>
+      <div className="label">
+        {label}
+        {hint ? ` (${hint})` : ""}
+      </div>
       <div className={`font-display text-xl num ${color}`}>{value}</div>
     </div>
   );
